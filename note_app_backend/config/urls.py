@@ -61,7 +61,11 @@ def dynamic_schema_view(request, *args, **kwargs):
     return view.with_ui('swagger', cache_timeout=0)(request)
 
 urlpatterns += [
+    # Existing root-level docs (kept)
     re_path(r'^docs/$', dynamic_schema_view, name='schema-swagger-ui'),
     re_path(r'^redoc/$', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
     re_path(r'^swagger\.json$', schema_view.without_ui(cache_timeout=0), name='schema-json'),
+    # API-scoped docs
+    re_path(r'^api/docs/$', dynamic_schema_view, name='api-schema-swagger-ui'),
+    re_path(r'^api/schema/$', schema_view.without_ui(cache_timeout=0), name='api-schema-json'),
 ]

@@ -11,6 +11,8 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os
+from urllib.parse import urlparse
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -42,15 +44,16 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # Third-party
     'rest_framework',
     'drf_yasg',
     'corsheaders',
+    # Local apps
     'api'
 ]
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.common.CommonMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -83,12 +86,41 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+def _db_from_env():
+    """Build Django DATABASES dict from DATABASE_URL if present; else SQLite."""
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        return {
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': BASE_DIR / 'db.sqlite3',
+            }
+        }
+    parsed = urlparse(url)
+    engine_map = {
+        'postgres': 'django.db.backends.postgresql',
+        'postgresql': 'django.db.backends.postgresql',
+        'postgresql_psycopg2': 'django.db.backends.postgresql',
+        'mysql': 'django.db.backends.mysql',
+        'sqlite': 'django.db.backends.sqlite3',
     }
-}
+    engine_key = parsed.scheme.split('+')[0] if parsed.scheme else ''
+    engine = engine_map.get(engine_key, 'django.db.backends.sqlite3')
+    if engine.endswith('sqlite3'):
+        name = parsed.path[1:] if parsed.path and len(parsed.path) > 1 else (BASE_DIR / 'db.sqlite3')
+        return {'default': {'ENGINE': engine, 'NAME': name}}
+    return {
+        'default': {
+            'ENGINE': engine,
+            'NAME': parsed.path[1:],
+            'USER': parsed.username or '',
+            'PASSWORD': parsed.password or '',
+            'HOST': parsed.hostname or '',
+            'PORT': str(parsed.port or ''),
+        }
+    }
+
+DATABASES = _db_from_env()
 
 
 # Password validation
@@ -132,7 +164,20 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-CORS_ALLOW_ALL_ORIGINS = True
+# REST framework defaults: JSON only, pagination
+REST_FRAMEWORK = {
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ],
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+    ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': int(os.getenv("PAGE_SIZE", "10")),
+}
+
+# CORS and proxy/security
+CORS_ALLOW_ALL_ORIGINS = True  # For local dev; tighten in production
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
 X_FRAME_OPTIONS = 'ALLOWALL'
